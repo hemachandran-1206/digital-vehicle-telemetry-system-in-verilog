@@ -1,0 +1,18 @@
+# Generated simulation outputs
+*.vcd
+*.vvp
+telemetry_sim
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+*.bak
+*.swp
+*~
