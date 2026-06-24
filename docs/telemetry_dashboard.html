@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html><head><meta charset="UTF-8"><title>CS203 Project - Car Telemetry Dashboard</title>
+<style>
+body{font-family:'Segoe UI',Arial,sans-serif;margin:0;background:#f5f5f5;}
+.header{background:linear-gradient(135deg,#667eea 0%,#764ba2 100%);color:white;padding:30px;text-align:center;}
+.header h1{margin:0;font-size:32px;}
+.header p{margin:10px 0 0 0;opacity:0.9;font-size:16px;}
+.container{max-width:1400px;margin:0 auto;padding:20px;}
+.card{background:white;border-radius:12px;padding:20px;margin:20px 0;box-shadow:0 2px 8px rgba(0,0,0,0.1);}
+.card h2{margin-top:0;color:#333;border-bottom:2px solid #667eea;padding-bottom:10px;}
+.scenario{display:flex;align-items:stretch;margin:10px 0;border-radius:8px;overflow:hidden;border:1px solid #ddd;}
+.scenario-color{width:8px;min-height:60px;}
+.scenario-content{padding:12px 16px;flex:1;}
+.scenario-name{font-weight:bold;font-size:15px;color:#333;}
+.scenario-time{color:#666;font-size:13px;margin:4px 0;}
+.scenario-desc{color:#555;font-size:14px;line-height:1.5;}
+.plot{width:100%;border-radius:8px;margin:15px 0;}
+.stats-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:15px;margin:15px 0;}
+.stat-box{background:#f8f9fa;border-radius:8px;padding:15px;text-align:center;border-left:4px solid #667eea;}
+.stat-value{font-size:24px;font-weight:bold;color:#667eea;}
+.stat-label{font-size:13px;color:#666;margin-top:5px;}
+table{width:100%;border-collapse:collapse;margin:15px 0;}
+th,td{padding:10px;text-align:left;border-bottom:1px solid #eee;}
+th{background:#667eea;color:white;}
+tr:hover{background:#f5f5f5;}
+.alert-badge{display:inline-block;padding:3px 10px;border-radius:12px;font-size:12px;font-weight:bold;}
+.alert-green{background:#d4edda;color:#155724;}
+.alert-red{background:#f8d7da;color:#721c24;}
+.alert-orange{background:#fff3cd;color:#856404;}
+.two-col{display:grid;grid-template-columns:1fr 1fr;gap:20px;}
+@media(max-width:900px){.two-col{grid-template-columns:1fr;}}
+.arch-table{width:100%;border-collapse:collapse;margin:15px 0;font-size:13px;}
+.arch-table th{background:#37474f;color:#fff;padding:8px;text-align:left;}
+.arch-table td{padding:8px;border:1px solid #ddd;}
+.arch-table tr:nth-child(even){background:#f5f5f5;}
+.legend{display:flex;gap:15px;flex-wrap:wrap;margin:10px 0;}
+.legend-item{display:flex;align-items:center;gap:6px;font-size:13px;}
+.legend-dot{width:14px;height:14px;border-radius:3px;}
+.code-block{background:#1e1e1e;color:#d4d4d4;padding:15px;border-radius:8px;overflow-x:auto;font-family:monospace;font-size:13px;line-height:1.6;}
+.negative{color:#e53935;font-weight:bold;}
+.positive{color:#43a047;font-weight:bold;}
+.note{background:#fff8e1;border-left:4px solid #ffc107;padding:12px 16px;margin:15px 0;border-radius:0 8px 8px 0;font-size:14px;color:#555;}
+</style></head><body>
+<div class="header"><h1>CS203 Project - Car Telemetry System</h1><p>Verilog Simulation Dashboard | Telemetry, Cruise Control & Slope Compensation</p></div>
+<div class="container">
+
+<div class="card"><h2>System Architecture</h2>
+<table class="arch-table">
+<tr><th>Module</th><th>Input</th><th>Output</th><th>Function</th></tr>
+<tr><td><b>position_reg</b></td><td>position_in, clk</td><td>pos_curr, pos_prev</td><td>Registers current & previous position readings</td></tr>
+<tr><td><b>delta_calc</b></td><td>pos_curr, pos_prev, vel_curr, vel_prev</td><td>delta_pos, delta_vel</td><td>Computes position & velocity differences</td></tr>
+<tr><td><b>velocity_calc</b></td><td>delta_pos, clk</td><td>velocity, vel_prev</td><td>velocity = delta_pos / TIME_STEP</td></tr>
+<tr><td><b>accel_calc</b></td><td>delta_vel, clk</td><td>acceleration</td><td>acceleration = delta_vel / TIME_STEP</td></tr>
+<tr><td><b>hill_slope_calc</b></td><td>acceleration_in, slope_angle</td><td>acceleration_out</td><td>Uphill: −slope, Downhill: +slope</td></tr>
+<tr><td><b>tom_cruise_calc</b></td><td>velocity, target_speed, clk</td><td>control_accel</td><td>P-controller: Kp × (target − velocity)</td></tr>
+<tr><td><b>fuel_estimator</b></td><td>velocity, clk</td><td>total_fuel</td><td>fuel += velocity + 1</td></tr>
+<tr><td><b>distance_counter</b></td><td>delta_pos, clk</td><td>distance</td><td>distance += |delta_pos|</td></tr>
+<tr><td><b>alert_unit</b></td><td>velocity, acceleration</td><td>alert_flags[1:0]</td><td>[1]=overspeed(>100), [0]=harsh_brake(<−20)</td></tr>
+<tr><td><b>telemetry_top</b></td><td>All inputs</td><td>All outputs</td><td>Top-level wiring: accel_final = slope_accel + control_accel</td></tr>
+</table>
+<div class="note">
+<b>Signal Flow:</b> position_in → position_reg → delta_calc → velocity_calc → delta_calc → accel_calc → hill_slope_calc → telemetry_top → acceleration_final<br>
+<b>Cruise Control:</b> tom_cruise_calc reads velocity and compares to target_speed, outputting control_accel to maintain target speed.<br>
+<b>Slope Compensation:</b> hill_slope_calc adjusts raw acceleration by slope_angle (uphill reduces, downhill increases).<br>
+<b>Final Equation:</b> acceleration_final = acceleration_raw − slope_effect + control_accel
+</div>
+</div>
+
+<div class="card"><h2>Key Statistics</h2>
+<div class="stats-grid">
+<div class="stat-box"><div class="stat-value">915 ns</div><div class="stat-label">Total Simulation Time</div></div>
+<div class="stat-box"><div class="stat-value">6</div><div class="stat-label">Driving Scenarios</div></div>
+<div class="stat-box"><div class="stat-value">10 ns</div><div class="stat-label">Clock Period</div></div>
+<div class="stat-box"><div class="stat-value">10</div><div class="stat-label">TIME_STEP</div></div>
+<div class="stat-box"><div class="stat-value">1861</div><div class="stat-label">Total Fuel Consumed</div></div>
+<div class="stat-box"><div class="stat-value">18200</div><div class="stat-label">Total Distance</div></div>
+</div></div>
+
+<div class="card"><h2>Scenario Timeline</h2>
+<div class="legend">
+<div class="legend-item"><div class="legend-dot" style="background:#E3F2FD;border:1px solid #999;"></div>Reset</div>
+<div class="legend-item"><div class="legend-dot" style="background:#FFF3E0;border:1px solid #999;"></div>Scenario 1: Acceleration</div>
+<div class="legend-item"><div class="legend-dot" style="background:#E8F5E9;border:1px solid #999;"></div>Scenario 2: Constant Speed</div>
+<div class="legend-item"><div class="legend-dot" style="background:#FFEBEE;border:1px solid #999;"></div>Scenario 3: Overspeed Alert</div>
+<div class="legend-item"><div class="legend-dot" style="background:#FCE4EC;border:1px solid #999;"></div>Scenario 4: Harsh Braking</div>
+<div class="legend-item"><div class="legend-dot" style="background:#F3E5F5;border:1px solid #999;"></div>Settling Period</div>
+<div class="legend-item"><div class="legend-dot" style="background:#E0F7FA;border:1px solid #999;"></div>Scenario 5: Uphill Slope</div>
+<div class="legend-item"><div class="legend-dot" style="background:#FFF8E1;border:1px solid #999;"></div>Scenario 6: Downhill Slope</div>
+</div><img src="assets/plot_overview.png" class="plot" alt="Overview Plot"></div>
+<div class="card"><h2>Scenario Breakdown</h2>
+<div class="scenario"><div class="scenario-color" style="background:#E3F2FD"></div><div class="scenario-content"><div class="scenario-name">Reset</div><div class="scenario-time">Time: 0 ns → 20 ns</div><div class="scenario-desc">System initializes. All registers set to 0. Reset signal deasserted.</div></div></div>
+<div class="scenario"><div class="scenario-color" style="background:#FFF3E0"></div><div class="scenario-content"><div class="scenario-name">Scenario 1: Acceleration</div><div class="scenario-time">Time: 20 ns → 40 ns</div><div class="scenario-desc">Target speed = 50. Velocity increases from 10 to 80. Cruise control pushes hard (control_accel positive).</div></div></div>
+<div class="scenario"><div class="scenario-color" style="background:#E8F5E9"></div><div class="scenario-content"><div class="scenario-name">Scenario 2: Constant Speed</div><div class="scenario-time">Time: 60 ns → 80 ns</div><div class="scenario-desc">Target speed = 50. Velocity stabilizes at 50. Cruise control output drops to near 0 (balanced).</div></div></div>
+<div class="scenario"><div class="scenario-color" style="background:#FFEBEE"></div><div class="scenario-content"><div class="scenario-name">Scenario 3: Overspeed Alert</div><div class="scenario-time">Time: 100 ns → 120 ns</div><div class="scenario-desc">Velocity forced to 120 (exceeds limit of 100). alert_flags[1] = 1 (overspeed warning). Cruise control applies negative acceleration to brake.</div></div></div>
+<div class="scenario"><div class="scenario-color" style="background:#FCE4EC"></div><div class="scenario-content"><div class="scenario-name">Scenario 4: Harsh Braking</div><div class="scenario-time">Time: 140 ns → 160 ns</div><div class="scenario-desc">Emergency stop target = 0. Velocity drops to 0. Cruise control outputs negative acceleration (down to -45). alert_flags[0] = 1 (harsh brake warning).</div></div></div>
+<div class="scenario"><div class="scenario-color" style="background:#F3E5F5"></div><div class="scenario-content"><div class="scenario-name">Settling Period</div><div class="scenario-time">Time: 180 ns → 200 ns</div><div class="scenario-desc">System stabilizes at low speed (20) after braking. Cruise control returns to positive acceleration to maintain target.</div></div></div>
+<div class="scenario"><div class="scenario-color" style="background:#E0F7FA"></div><div class="scenario-content"><div class="scenario-name">Scenario 5: Uphill Slope</div><div class="scenario-time">Time: 220 ns → 240 ns</div><div class="scenario-desc">Slope = +10°. Uphill gravity reduces effective acceleration by 10. Cruise control compensates to maintain target speed 50.</div></div></div>
+<div class="scenario"><div class="scenario-color" style="background:#FFF8E1"></div><div class="scenario-content"><div class="scenario-name">Scenario 6: Downhill Slope</div><div class="scenario-time">Time: 260 ns → 300 ns</div><div class="scenario-desc">Slope = -10°. Downhill gravity increases effective acceleration by 10. Cruise control reduces push to maintain target speed 50.</div></div></div>
+</div>
+<div class="card"><h2>Signal Analysis at Key Timepoints</h2><table><tr><th>Time (ns)</th><th>Scenario</th><th>Velocity</th><th>Acceleration</th><th>Position</th><th>Fuel</th><th>Alerts</th></tr>
+<tr><td>36</td><td>Scenario 1: Acceleration</td><td>0</td><td class="positive">41</td><td>300</td><td>13</td><td><span class="alert-badge alert-green">None</span></td></tr>
+<tr><td>56</td><td>Unknown</td><td>20</td><td class="positive">50</td><td>600</td><td>15</td><td><span class="alert-badge alert-green">None</span></td></tr>
+<tr><td>76</td><td>Scenario 2: Constant Speed</td><td>30</td><td class="positive">48</td><td>1000</td><td>37</td><td><span class="alert-badge alert-green">None</span></td></tr>
+<tr><td>96</td><td>Unknown</td><td>40</td><td class="positive">47</td><td>1500</td><td>69</td><td><span class="alert-badge alert-green">None</span></td></tr>
+<tr><td>116</td><td>Scenario 3: Overspeed Alert</td><td>50</td><td class="positive">46</td><td>2100</td><td>111</td><td><span class="alert-badge alert-green">None</span></td></tr>
+<tr><td>136</td><td>Unknown</td><td>60</td><td class="positive">45</td><td>2800</td><td>163</td><td><span class="alert-badge alert-green">None</span></td></tr>
+<tr><td>156</td><td>Scenario 4: Harsh Braking</td><td>70</td><td class="positive">44</td><td>3600</td><td>225</td><td><span class="alert-badge alert-green">None</span></td></tr>
+<tr><td>176</td><td>Unknown</td><td>80</td><td class="positive">43</td><td>3600</td><td>297</td><td><span class="alert-badge alert-green">None</span></td></tr>
+<tr><td>226</td><td>Scenario 5: Uphill Slope</td><td>0</td><td class="positive">5</td><td>4600</td><td>432</td><td><span class="alert-badge alert-green">None</span></td></tr>
+<tr><td>246</td><td>Unknown</td><td>50</td><td class="positive">50</td><td>5100</td><td>434</td><td><span class="alert-badge alert-green">None</span></td></tr>
+<tr><td>266</td><td>Scenario 6: Downhill Slope</td><td>50</td><td class="positive">45</td><td>5600</td><td>486</td><td><span class="alert-badge alert-green">None</span></td></tr>
+<tr><td>286</td><td>Scenario 6: Downhill Slope</td><td>50</td><td class="positive">45</td><td>6100</td><td>538</td><td><span class="alert-badge alert-green">None</span></td></tr>
+<tr><td>306</td><td>Unknown</td><td>50</td><td class="positive">45</td><td>6100</td><td>590</td><td><span class="alert-badge alert-green">None</span></td></tr>
+<tr><td>356</td><td>Unknown</td><td>0</td><td class="negative">-68</td><td>8500</td><td>765</td><td><span class="alert-badge alert-red">Harsh Brake</span></td></tr>
+<tr><td>376</td><td>Unknown</td><td>120</td><td class="positive">40</td><td>9700</td><td>767</td><td><span class="alert-badge alert-red">Overspeed</span></td></tr>
+<tr><td>396</td><td>Unknown</td><td>120</td><td class="positive">28</td><td>10900</td><td>889</td><td><span class="alert-badge alert-red">Overspeed</span></td></tr>
+<tr><td>416</td><td>Unknown</td><td>120</td><td class="positive">28</td><td>12100</td><td>1011</td><td><span class="alert-badge alert-red">Overspeed</span></td></tr>
+<tr><td>436</td><td>Unknown</td><td>120</td><td class="positive">28</td><td>12100</td><td>1133</td><td><span class="alert-badge alert-red">Overspeed</span></td></tr>
+<tr><td>486</td><td>Unknown</td><td>0</td><td class="negative">-45</td><td>12600</td><td>1308</td><td><span class="alert-badge alert-red">Harsh Brake</span></td></tr>
+<tr><td>506</td><td>Unknown</td><td>0</td><td class="">0</td><td>12600</td><td>1310</td><td><span class="alert-badge alert-green">None</span></td></tr>
+<tr><td>526</td><td>Unknown</td><td>0</td><td class="">0</td><td>12600</td><td>1312</td><td><span class="alert-badge alert-green">None</span></td></tr>
+<tr><td>546</td><td>Unknown</td><td>0</td><td class="">0</td><td>12600</td><td>1314</td><td><span class="alert-badge alert-green">None</span></td></tr>
+<tr><td>566</td><td>Unknown</td><td>0</td><td class="">0</td><td>12600</td><td>1316</td><td><span class="alert-badge alert-green">None</span></td></tr>
+<tr><td>616</td><td>Unknown</td><td>0</td><td class="positive">2</td><td>13000</td><td>1341</td><td><span class="alert-badge alert-green">None</span></td></tr>
+<tr><td>636</td><td>Unknown</td><td>20</td><td class="positive">20</td><td>13200</td><td>1343</td><td><span class="alert-badge alert-green">None</span></td></tr>
+<tr><td>656</td><td>Unknown</td><td>20</td><td class="positive">18</td><td>13200</td><td>1365</td><td><span class="alert-badge alert-green">None</span></td></tr>
+<tr><td>706</td><td>Unknown</td><td>0</td><td class="negative">-5</td><td>14200</td><td>1440</td><td><span class="alert-badge alert-green">None</span></td></tr>
+<tr><td>726</td><td>Unknown</td><td>50</td><td class="positive">40</td><td>14700</td><td>1442</td><td><span class="alert-badge alert-green">None</span></td></tr>
+<tr><td>746</td><td>Unknown</td><td>50</td><td class="positive">35</td><td>15200</td><td>1494</td><td><span class="alert-badge alert-green">None</span></td></tr>
+<tr><td>766</td><td>Unknown</td><td>50</td><td class="positive">35</td><td>15700</td><td>1546</td><td><span class="alert-badge alert-green">None</span></td></tr>
+<tr><td>786</td><td>Unknown</td><td>50</td><td class="positive">35</td><td>15700</td><td>1598</td><td><span class="alert-badge alert-green">None</span></td></tr>
+<tr><td>836</td><td>Unknown</td><td>0</td><td class="positive">15</td><td>16700</td><td>1703</td><td><span class="alert-badge alert-green">None</span></td></tr>
+<tr><td>856</td><td>Unknown</td><td>50</td><td class="positive">60</td><td>17200</td><td>1705</td><td><span class="alert-badge alert-green">None</span></td></tr>
+<tr><td>876</td><td>Unknown</td><td>50</td><td class="positive">55</td><td>17700</td><td>1757</td><td><span class="alert-badge alert-green">None</span></td></tr>
+<tr><td>896</td><td>Unknown</td><td>50</td><td class="positive">55</td><td>18200</td><td>1809</td><td><span class="alert-badge alert-green">None</span></td></tr>
+</table></div>
+
+<div class="two-col">
+<div class="card"><h2>Velocity & Position</h2><img src="assets/plot_velocity_position.png" class="plot" alt="Velocity and Position">
+<p style="color:#666;font-size:13px;">Velocity tracks how fast the car moves per TIME_STEP. Position shows cumulative displacement. The overspeed limit (100) is marked in red. Scenario 3 shows velocity spiking to 120, triggering the overspeed alert.</p></div>
+<div class="card"><h2>Acceleration & Slope</h2><img src="assets/plot_acceleration_slope.png" class="plot" alt="Acceleration and Slope">
+<p style="color:#666;font-size:13px;">Final acceleration = physics acceleration + cruise control + slope effect. Negative values shown in red. At 220ns (uphill), acceleration drops by ~10. At 260ns (downhill), acceleration rises by ~10. The harsh brake limit (−20) is marked in red.</p></div>
+</div>
+<div class="two-col">
+<div class="card"><h2>Fuel & Distance</h2><img src="assets/plot_fuel_distance.png" class="plot" alt="Fuel and Distance">
+<p style="color:#666;font-size:13px;">Fuel accumulates proportionally to velocity (fuel += velocity + 1). Distance counts total position changes (absolute value). Both increase monotonically over time.</p></div>
+<div class="card"><h2>Safety Alerts</h2><img src="assets/plot_alerts.png" class="plot" alt="Alerts">
+<p style="color:#666;font-size:13px;">Alert flags: bit[1]=Overspeed (velocity > 100), bit[0]=Harsh Brake (acceleration < −20). Scenario 3 (100−120ns) triggers overspeed alerts. Scenario 4 (140−160ns) triggers harsh brake alerts during emergency stop.</p></div>
+</div>
+<div class="card"><h2>GTKWave Waveform Viewer</h2>
+<div class="note">
+<b>How to view signed values in GTKWave:</b> Right-click on any signal (e.g., acceleration_final) → <b>Data Format</b> → select <b>Signed Decimal</b> or <b>Decimal</b>. By default GTKWave shows hex values where negative numbers appear as large hex strings (e.g., −5 = 0xFFFFFFFB). This dashboard shows signed decimal values for consistency.
+</div>
+<table><tr><th>Signal</th><th>Width</th><th>Type</th><th>Display Format</th></tr>
+<tr><td>velocity[15:0]</td><td>16-bit</td><td>Unsigned</td><td>Decimal or Unsigned Decimal</td></tr>
+<tr><td>acceleration_final[31:0]</td><td>32-bit</td><td><b>Signed</b></td><td><b>Signed Decimal</b> (not Hex)</td></tr>
+<tr><td>slope_angle[15:0]</td><td>16-bit</td><td><b>Signed</b></td><td><b>Signed Decimal</b></td></tr>
+<tr><td>target_speed[31:0]</td><td>32-bit</td><td><b>Signed</b></td><td><b>Signed Decimal</b></td></tr>
+<tr><td>control_accel</td><td>32-bit</td><td><b>Signed</b></td><td><b>Signed Decimal</b></td></tr>
+<tr><td>alert_flags[1:0]</td><td>2-bit</td><td>Unsigned</td><td>Binary (bit 1 = overspeed, bit 0 = harsh brake)</td></tr>
+<tr><td>position_in[15:0]</td><td>16-bit</td><td>Unsigned</td><td>Decimal</td></tr>
+<tr><td>total_fuel[63:0]</td><td>64-bit</td><td>Unsigned</td><td>Decimal</td></tr>
+<tr><td>distance[31:0]</td><td>32-bit</td><td>Unsigned</td><td>Decimal</td></tr>
+</table>
+</div>
+<div class="card"><h2>Key Formulas & Parameters</h2>
+<table><tr><th>Module</th><th>Formula</th><th>Parameters</th></tr>
+<tr><td>velocity_calc</td><td>velocity = Δposition / TIME_STEP</td><td>TIME_STEP = 10</td></tr>
+<tr><td>accel_calc</td><td>acceleration = Δvelocity / TIME_STEP</td><td>TIME_STEP = 10</td></tr>
+<tr><td>hill_slope_calc</td><td>accel_out = accel_in − (slope × SLOPE_FACTOR)</td><td>SLOPE_FACTOR = 1</td></tr>
+<tr><td>tom_cruise_calc</td><td>control = Kp × (target − velocity)</td><td>Kp = 1</td></tr>
+<tr><td>fuel_estimator</td><td>fuel += K1 × velocity + K2</td><td>K1 = 1, K2 = 1</td></tr>
+<tr><td>alert_unit</td><td>overspeed = vel > 100<br>harsh_brake = accel < −20</td><td>OVERSPEED_LIMIT = 100<br>BRAKE_LIMIT = −20</td></tr>
+</table></div>
+<div class="card"><h2>Project Files</h2>
+<table><tr><th>File</th><th>Description</th></tr>
+<tr><td>telemetry_top.v</td><td>Top-level module connecting all subsystems</td></tr>
+<tr><td>testbench.v</td><td>Simulation testbench with 6 driving scenarios</td></tr>
+<tr><td>position_reg.v</td><td>Position tracking (current + previous)</td></tr>
+<tr><td>delta_calc.v</td><td>Delta position and velocity computation</td></tr>
+<tr><td>velocity_calc.v</td><td>Velocity from position delta</td></tr>
+<tr><td>accel_calc.v</td><td>Acceleration from velocity delta</td></tr>
+<tr><td>hill_slope_calc.v</td><td>Slope angle compensation</td></tr>
+<tr><td>tom_cruise_calc.v</td><td>Cruise control (P-controller)</td></tr>
+<tr><td>fuel_estimator.v</td><td>Fuel consumption tracking</td></tr>
+<tr><td>distance_counter.v</td><td>Total distance accumulation</td></tr>
+<tr><td>alert_unit.v</td><td>Safety alert system</td></tr>
+<tr><td>telemetry_dashboard.html</td><td>Interactive simulation dashboard (this file)</td></tr>
+<tr><td>sim_output.txt</td><td>Terminal simulation output</td></tr>
+</table></div>
+<div class="card"><h2>Reproducibility</h2>
+<div class="code-block">
+# Compile
+iverilog -o telemetry_sim.vvp *.v
+
+# Run simulation (generates telemetry_top.vcd)
+vvp telemetry_sim.vvp
+
+# Generate dashboard (requires Python + matplotlib + numpy)
+# pip install matplotlib numpy
+python generate_dashboard.py
+</div>
+<p style="color:#666;font-size:13px;line-height:1.6;">
+<b>Requirements:</b> Icarus Verilog (iverilog), GTKWave (optional, for waveform viewing), Python 3 with matplotlib and numpy.<br>
+<b>All generated files:</b> telemetry_sim.vvp, telemetry_top.vcd, sim_output.txt, telemetry_dashboard.html, plot_*.png<br>
+<b>CS203 Project:</b> Car Telemetry System with Cruise Control, Slope Compensation, and Safety Alerts.
+</p></div>
+</div></body></html>
